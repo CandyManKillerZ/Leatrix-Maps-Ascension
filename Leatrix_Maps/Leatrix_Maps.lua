@@ -281,19 +281,23 @@
 		WorldMapFrame:DisableDrawLayer("ARTWORK")
 		WorldMapFrame:DisableDrawLayer("OVERLAY")
 
-		-- Thin black border around the map canvas (matches TBC Classic look)
 		local mapBorder = WorldMapScrollFrame:CreateTexture(nil, "BACKGROUND")
 		mapBorder:SetPoint("TOPLEFT",     WorldMapScrollFrame, "TOPLEFT",     -5,  5)
 		mapBorder:SetPoint("BOTTOMRIGHT", WorldMapScrollFrame, "BOTTOMRIGHT",  5, -5)
 		mapBorder:SetTexture("Interface\\ChatFrame\\ChatFrameBackground")
 		mapBorder:SetVertexColor(0, 0, 0, 0.5)
 
-		-- Move close button to top-right of map canvas (matches TBC Classic)
 		if WorldMapFrameCloseButton then
 			WorldMapFrameCloseButton:ClearAllPoints()
-			WorldMapFrameCloseButton:SetPoint("TOPRIGHT", WorldMapScrollFrame, "TOPRIGHT", 0, 0)
+			WorldMapFrameCloseButton:SetPoint("TOPRIGHT", WorldMapScrollFrame, "TOPRIGHT", 6, 6)
 			WorldMapFrameCloseButton:SetFrameLevel(5000)
 			WorldMapFrameCloseButton.SetPoint = function() end
+		end
+		if WorldMapButton and WorldMapFrameCloseButton then
+			local closeSpacer = CreateFrame("Frame", nil, WorldMapButton)
+			closeSpacer:SetSize(WorldMapFrameCloseButton:GetWidth(), WorldMapFrameCloseButton:GetHeight())
+			closeSpacer:SetPoint("TOPRIGHT", WorldMapButton, "TOPRIGHT", 0, 0)
+			closeSpacer:Show()
 		end
 
 		----------------------------------------------------------------------
@@ -323,10 +327,10 @@
 			L["Outland"] = POSTMASTER_PIPE_OUTLAND or "Outland"
 			L["Northrend"] = POSTMASTER_PIPE_NORTHREND or "Northrend"
 
-			-- Create outer frame for dropdown menus
+
 			local outerFrame = CreateFrame("FRAME", nil, WorldMapFrame)
 			outerFrame:SetSize(360, 20)
-			outerFrame:SetPoint("TOPLEFT", WorldMapFrame, "TOPLEFT", 7, -3)
+			outerFrame:SetPoint("TOPLEFT", WorldMapScrollFrame, "TOPLEFT", 3, 15)
 			outerFrame:SetFrameStrata("FULLSCREEN_DIALOG")
 			outerFrame:SetFrameLevel(WorldMapFrame:GetFrameLevel() + 10)
 			-- Helper: build zone table for a continent
@@ -527,12 +531,12 @@
 
 		end
 
-		-- Position WorldMapLevelDropDown (Dalaran/dungeon floors) when zone menu is off
 		if WorldMapLevelDropDown and LeaMapsLC["ShowZoneMenu"] ~= "On" then
 			WorldMapLevelDropDown:ClearAllPoints()
-			WorldMapLevelDropDown:SetPoint("TOPLEFT", WorldMapFrame, "TOPLEFT", -7, -25)
+			WorldMapLevelDropDown:SetPoint("TOPLEFT", WorldMapScrollFrame, "TOPLEFT", -10, -4)
 			WorldMapLevelDropDown:SetScale(0.85)
 			WorldMapLevelDropDown:SetFrameStrata("FULLSCREEN_DIALOG")
+			WorldMapLevelDropDown:SetFrameLevel((WorldMapButton:GetFrameLevel() or 0) + 10)
 		end
 
 		----------------------------------------------------------------------
