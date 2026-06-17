@@ -1,4 +1,4 @@
-﻿
+
 	----------------------------------------------------------------------
 	-- Leatrix Maps Zoom
 	-- Map zoom and pan feature, adapted from Magnify-WotLK
@@ -231,108 +231,14 @@
 	-- Questie pin management
 	----------------------------------------------------------------------
 
+	-- Disabled: Questie pins are now managed by Questie itself
 	function LeaMapsZoom.SetQuestieWorldMapPinsVisible(isVisible)
-		if not LeaMapsZoom.questieWorldMapPins then return end
-		for frameObject in pairs(LeaMapsZoom.questieWorldMapPins) do
-			if frameObject and frameObject.IsShown and frameObject.Show and frameObject.Hide then
-				if isVisible then
-					if frameObject.__magnifyQuestieTemporarilyHidden then
-						frameObject:Show()
-						frameObject.__magnifyQuestieTemporarilyHidden = nil
-					end
-				elseif frameObject:IsShown() then
-					frameObject.__magnifyQuestieTemporarilyHidden = true
-					frameObject:Hide()
-				end
-			end
-		end
+		-- Intentionally empty: Questie manages its own pins
 	end
 
+	-- Disabled: Questie pins are now managed by Questie itself
 	function LeaMapsZoom.SyncQuestieWorldMapPins(forceRescan)
-		if not WorldMapFrame:IsShown() then return end
-		if not LeaMapsZoom.questieWorldMapPins then
-			LeaMapsZoom.questieWorldMapPins = {}
-		end
-
-		local now = GetTime()
-		if forceRescan or not LeaMapsZoom.questieLastScan or (now - LeaMapsZoom.questieLastScan) > 0.2 then
-			LeaMapsZoom.questieWorldMapPins = {}
-			LeaMapsZoom.questieLastScan = now
-			for frameName, frameObject in pairs(_G) do
-				local frameType = type(frameObject)
-				if type(frameName) == "string" and
-				   (frameType == "table" or frameType == "userdata") and
-				   string.find(frameName, "Questie") and
-				   frameObject.GetParent and frameObject.SetScale and
-				   isFrameOnWorldMap(frameObject) then
-					LeaMapsZoom.questieWorldMapPins[frameObject] = true
-				end
-			end
-		end
-
-		if not forceRescan and LeaMapsZoom.questieLastApply and (now - LeaMapsZoom.questieLastApply) < 0.05 then
-			return
-		end
-		LeaMapsZoom.questieLastApply = now
-
-		local detailFrameScale          = WorldMapDetailFrame:GetScale()
-		local detailFrameEffectiveScale = WorldMapDetailFrame:GetEffectiveScale()
-		for frameObject in pairs(LeaMapsZoom.questieWorldMapPins) do
-			if frameObject and frameObject.GetParent and frameObject.GetPoint and isFrameOnWorldMap(frameObject) then
-				local point, relativeFrame, relativePoint, offsetX, offsetY = frameObject:GetPoint(1)
-				local anchorFrame        = relativeFrame or frameObject:GetParent() or WorldMapDetailFrame
-				local anchorEffectiveScale = detailFrameEffectiveScale
-				if anchorFrame.GetEffectiveScale then
-					anchorEffectiveScale = anchorFrame:GetEffectiveScale()
-				end
-
-				local handledCornerButton = false
-				if point and relativePoint and
-				   isQuestieMapCornerButton(frameObject, point, relativeFrame, relativePoint, offsetX, offsetY) then
-					lockQuestieMapCornerButton(frameObject, point, relativePoint, offsetX, offsetY, detailFrameScale)
-					handledCornerButton = true
-				end
-
-				if not handledCornerButton and point and
-				   type(offsetX) == "number" and type(offsetY) == "number" and
-				   anchorEffectiveScale and anchorEffectiveScale > 0 then
-					local correctionFactor = detailFrameScale * (detailFrameEffectiveScale / anchorEffectiveScale)
-					local rawOffsetX = offsetX
-					local rawOffsetY = offsetY
-
-					if frameObject.__magnifyQuestieAdjusted and
-					   isCloseEnough(offsetX, frameObject.__magnifyQuestieAdjustedX, 0.05) and
-					   isCloseEnough(offsetY, frameObject.__magnifyQuestieAdjustedY, 0.05) then
-						rawOffsetX = frameObject.__magnifyQuestieRawX or rawOffsetX
-						rawOffsetY = frameObject.__magnifyQuestieRawY or rawOffsetY
-					end
-
-					local adjustedOffsetX = rawOffsetX * correctionFactor
-					local adjustedOffsetY = rawOffsetY * correctionFactor
-					adjustedOffsetX, adjustedOffsetY =
-						clampQuestieMapPinOffset(frameObject, anchorFrame, point, relativePoint,
-						                        adjustedOffsetX, adjustedOffsetY)
-
-					if not isCloseEnough(offsetX, adjustedOffsetX, 0.05) or
-					   not isCloseEnough(offsetY, adjustedOffsetY, 0.05) then
-						frameObject:ClearAllPoints()
-						frameObject:SetPoint(point, relativeFrame, relativePoint, adjustedOffsetX, adjustedOffsetY)
-						offsetX = adjustedOffsetX
-						offsetY = adjustedOffsetY
-					end
-
-					frameObject.__magnifyQuestieAdjusted    = true
-					frameObject.__magnifyQuestieRawX        = rawOffsetX
-					frameObject.__magnifyQuestieRawY        = rawOffsetY
-					frameObject.__magnifyQuestieAdjustedX   = offsetX
-					frameObject.__magnifyQuestieAdjustedY   = offsetY
-					frameObject.__magnifyQuestieLastScale   = detailFrameScale
-				end
-			else
-				LeaMapsZoom.questieWorldMapPins[frameObject] = nil
-			end
-		end
-		LeaMapsZoom.SetQuestieWorldMapPinsVisible(true)
+		-- Intentionally empty: Questie manages its own pins, we don't touch them
 	end
 
 	----------------------------------------------------------------------
@@ -348,7 +254,6 @@
 
 	function LeaMapsZoom.AfterScrollOrPan()
 		LeaMapsZoom.PersistMapScrollAndPan()
-		LeaMapsZoom.SyncQuestieWorldMapPins(false)
 		if WORLDMAP_SETTINGS.selectedQuest then
 			WorldMapBlobFrame:DrawQuestBlob(WORLDMAP_SETTINGS.selectedQuestId, false)
 			WorldMapBlobFrame:DrawQuestBlob(WORLDMAP_SETTINGS.selectedQuestId, true)
@@ -418,7 +323,6 @@
 		if WorldMapFrame_UpdateQuests() > 0 then
 			LeaMapsZoom.RedrawSelectedQuest()
 		end
-		LeaMapsZoom.SyncQuestieWorldMapPins(true)
 	end
 
 	----------------------------------------------------------------------
@@ -533,7 +437,6 @@
 		if LeaMapsZoom.GetElvUI() then
 			LeaMapsZoom.ElvUI_SetupWorldMapFrame()
 		end
-		LeaMapsZoom.SyncQuestieWorldMapPins(true)
 	end
 
 	----------------------------------------------------------------------
@@ -584,7 +487,6 @@
 		newScale = max(LeaMapsZoom.MIN_ZOOM, newScale)
 		newScale = min(MagnifyOptions.maxZoom, newScale)
 
-		LeaMapsZoom.SetQuestieWorldMapPinsVisible(false)
 		LeaMapsZoom.SetDetailFrameScale(newScale)
 
 		this.maxX = ((WorldMapDetailFrame:GetWidth()  * newScale) - this:GetWidth())  / newScale
@@ -831,7 +733,6 @@
 		if WorldMapScrollFrame.panning then
 			LeaMapsZoom.WorldMapScrollFrame_OnPan(GetCursorPosition())
 		end
-		LeaMapsZoom.SyncQuestieWorldMapPins(false)
 	end
 
 	----------------------------------------------------------------------

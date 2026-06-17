@@ -4,7 +4,7 @@
 ## Notes: Enhancements for your maps.
 
 ## Version: 3.0.188
-## Author: Leatrix
+## Author: Leatrix, 5Buttons, Ravelo
 ## SavedVariables: LeaMapsDB MagnifyOptions
 
 ## OptionalDeps: Leatrix_enUS, ElvUI, Demodal, Carbonite

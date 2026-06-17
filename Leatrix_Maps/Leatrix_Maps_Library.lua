@@ -1,4 +1,4 @@
-﻿----------------------------------------------------------------------
+----------------------------------------------------------------------
 -- L00: Leatrix Maps Library
 ----------------------------------------------------------------------
 
@@ -92,11 +92,16 @@ local setmetatable, rawget = setmetatable, rawget
 local next, select, pairs, type, tostring = next, select, pairs, type, tostring
 
 
+
 local function Dispatch(handlers, ...)
 	local index, method = next(handlers)
 	if not method then return end
 	repeat
-		securecallfunction(method, ...)
+		if securecallfunction then
+			securecallfunction(method, ...)
+		else
+			method(...)  -- WoW 3.3.5 doesn't have securecallfunction, call directly
+		end
 		index, method = next(handlers, index)
 	until not method
 end
