@@ -67,4 +67,3 @@ As a disclaimer this addon was about 90% vibecoded, but so far the result is bet
 
 - **Leatrix** — original addon author
 - Zoom adapted from [Magnify-WotLK](https://github.com/rissole/Magnify-WotLK)
-- 
