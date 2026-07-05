@@ -962,6 +962,8 @@
 			WorldMapFrame:ClearAllPoints()
 			WorldMapFrame:SetPoint(LeaMapsLC["MapPosA"], UIParent, LeaMapsLC["MapPosR"], LeaMapsLC["MapPosX"], LeaMapsLC["MapPosY"])
 			if WorldMapTitleButton_OnDragStop then WorldMapTitleButton_OnDragStop() end
+			-- Quest POI sizes were computed before the scale change above
+			if LeaMapsZoom and LeaMapsZoom.RefreshQuestPOIs then LeaMapsZoom.RefreshQuestPOIs() end
 		end)
 
 		-- ElvUI: restore mouse (ElvUI noops EnableMouse) and hide its backdrop
@@ -1532,6 +1534,7 @@
 				LeaMapsDB["MapScale"] = WorldMapFrame:GetScale()
 				LeaMapsLC["MapPosA"], void, LeaMapsLC["MapPosR"], LeaMapsLC["MapPosX"], LeaMapsLC["MapPosY"] = WorldMapFrame:GetPoint()
 				if LeaMapsZoom and LeaMapsZoom.EndWindowDrag then LeaMapsZoom.EndWindowDrag() end
+				if LeaMapsZoom and LeaMapsZoom.RefreshQuestPOIs then LeaMapsZoom.RefreshQuestPOIs() end
 			end)
 
 			-- Show/hide handle: only in windowed (mini) mode when unlocked

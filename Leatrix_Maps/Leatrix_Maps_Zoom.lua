@@ -535,6 +535,7 @@
 			WorldMapFrame:SetScale(newScale)
 			WorldMapScreenAnchor.preferredMinimodeScale = newScale
 			LeaMapsZoom.RepaintBlob()
+			LeaMapsZoom.RefreshQuestPOIs()
 			return
 		end
 
@@ -847,6 +848,21 @@
 			WorldMapFrame_SelectQuestById(WORLDMAP_SETTINGS.selectedQuestId)
 		else
 			WorldMapFrame_SelectQuestFrame(_G["WorldMapQuestFrame1"])
+		end
+	end
+
+	-- Quest POI button sizes are computed against the map frame's effective
+	-- scale (in resizePOI), so any change to the frame's own scale AFTER the
+	-- last WorldMapFrame_UpdateQuests leaves them the wrong size until the
+	-- next quest update. Force one immediately; Blizzard re-anchors the
+	-- buttons and the ResizeQuestPOIs hook re-scales them. (Never call
+	-- resizePOI directly here — its position math is only valid right after
+	-- Blizzard has reset the button anchors.)
+	function LeaMapsZoom.RefreshQuestPOIs()
+		if WorldMapFrame:IsShown() and WorldMapFrame_UpdateQuests then
+			if (WorldMapFrame_UpdateQuests() or 0) > 0 then
+				LeaMapsZoom.RedrawSelectedQuest()
+			end
 		end
 	end
 
