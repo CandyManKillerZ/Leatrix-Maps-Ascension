@@ -230,6 +230,18 @@
 		-- Initialise fog-of-war reveal feature (Leatrix_Maps_Reveal.lua)
 		LeaMapsFC.Setup()
 
+		-- Ascension: the fullscreen map with objectives enabled auto-switches
+		-- to the quest-list layout (quest list + detail panels beside/below
+		-- the map). That layout fights the Leatrix remodel, so route it to
+		-- the plain full map view instead. On-map quest POIs and the
+		-- objective glow are unaffected (they are gated by quest count, not
+		-- by the view).
+		if WorldMapFrame_SetQuestMapView and WorldMapFrame_SetFullMapView then
+			WorldMapFrame_SetQuestMapView = function()
+				WorldMapFrame_SetFullMapView()
+			end
+		end
+
 		-- Unlock map frame
 		if WorldMapTitleDropDown_ToggleLock then
 			WorldMapTitleDropDown_ToggleLock()
@@ -924,6 +936,7 @@
 		WorldMapFrame:SetScript("OnDragStart", function()
 			if LeaMapsLC["UnlockMapFrame"] == "On" and
 			   WORLDMAP_SETTINGS and WORLDMAP_SETTINGS.size == WORLDMAP_WINDOWED_SIZE then
+				if LeaMapsZoom and LeaMapsZoom.BeginWindowDrag then LeaMapsZoom.BeginWindowDrag() end
 				WorldMapFrame:StartMoving()
 			end
 		end)
@@ -932,6 +945,7 @@
 			WorldMapFrame:SetUserPlaced(false)
 			LeaMapsLC["MapPosA"], void, LeaMapsLC["MapPosR"], LeaMapsLC["MapPosX"], LeaMapsLC["MapPosY"] = WorldMapFrame:GetPoint()
 			if WorldMapTitleButton_OnDragStop then WorldMapTitleButton_OnDragStop() end
+			if LeaMapsZoom and LeaMapsZoom.EndWindowDrag then LeaMapsZoom.EndWindowDrag() end
 		end)
 
 		-- Force windowed map mode on every show; Blizzard respects this CVar
@@ -1028,14 +1042,14 @@
 				if GetUnitSpeed("player") ~= 0 and not WorldMapFrame:IsMouseOver() then
 					UIFrameFadeOut(WorldMapFrame, 0.3, WorldMapFrame:GetAlpha(), targetAlpha)
 					if WorldMapBlobFrame then
-						WorldMapBlobFrame:SetFillAlpha(128 * targetAlpha)
-						WorldMapBlobFrame:SetBorderAlpha(192 * targetAlpha)
+						WorldMapBlobFrame:SetFillAlpha((LeaMapsZoom and LeaMapsZoom.BLOB_FILL_ALPHA or 128) * targetAlpha)
+						WorldMapBlobFrame:SetBorderAlpha((LeaMapsZoom and LeaMapsZoom.BLOB_BORDER_ALPHA or 192) * targetAlpha)
 					end
 				else
 					UIFrameFadeIn(WorldMapFrame, 0.3, WorldMapFrame:GetAlpha(), baseAlpha)
 					if WorldMapBlobFrame then
-						WorldMapBlobFrame:SetFillAlpha(128)
-						WorldMapBlobFrame:SetBorderAlpha(192)
+						WorldMapBlobFrame:SetFillAlpha(LeaMapsZoom and LeaMapsZoom.BLOB_FILL_ALPHA or 128)
+						WorldMapBlobFrame:SetBorderAlpha(LeaMapsZoom and LeaMapsZoom.BLOB_BORDER_ALPHA or 192)
 					end
 				end
 			end
@@ -1057,8 +1071,8 @@
 					LeaMapsCB["movingOpacity"]:Disable()
 					WorldMapFrame:SetAlpha(LeaMapsLC["stationaryOpacity"] or 1)
 					if WorldMapBlobFrame then
-						WorldMapBlobFrame:SetFillAlpha(128)
-						WorldMapBlobFrame:SetBorderAlpha(192)
+						WorldMapBlobFrame:SetFillAlpha(LeaMapsZoom and LeaMapsZoom.BLOB_FILL_ALPHA or 128)
+						WorldMapBlobFrame:SetBorderAlpha(LeaMapsZoom and LeaMapsZoom.BLOB_BORDER_ALPHA or 192)
 					end
 				end
 			end
@@ -1494,6 +1508,7 @@
 			scaleMouse:SetScript("OnLeave", function() scaleHandleTex:SetDesaturated(true)  end)
 
 			scaleMouse:SetScript("OnMouseDown", function(frame)
+				if LeaMapsZoom and LeaMapsZoom.BeginWindowDrag then LeaMapsZoom.BeginWindowDrag() end
 				mapLeft          = WorldMapFrame:GetLeft()
 				mapTop           = WorldMapFrame:GetTop()
 				mapNormalScale   = WorldMapFrame:GetScale()
@@ -1516,6 +1531,7 @@
 				frame:SetAllPoints(scaleHandle)
 				LeaMapsDB["MapScale"] = WorldMapFrame:GetScale()
 				LeaMapsLC["MapPosA"], void, LeaMapsLC["MapPosR"], LeaMapsLC["MapPosX"], LeaMapsLC["MapPosY"] = WorldMapFrame:GetPoint()
+				if LeaMapsZoom and LeaMapsZoom.EndWindowDrag then LeaMapsZoom.EndWindowDrag() end
 			end)
 
 			-- Show/hide handle: only in windowed (mini) mode when unlocked

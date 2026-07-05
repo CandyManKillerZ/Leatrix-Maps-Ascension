@@ -24,6 +24,16 @@
 
 	LeaMapsZoom.PLAYER_ARROW_SIZE = 36
 
+	-- Ascension's client composites the objective blob glow AFTER the whole
+	-- UI renders, so it can never be layered below the quest POI buttons
+	-- (verified: even TOOLTIP-strata buttons draw under it). The fill is
+	-- the glow's body but also the wash that tints the numbered icon, so
+	-- this is a balance dial: higher = fuller glow but more tint on the
+	-- number, lower = crisper number but thinner glow.
+	-- Stock values: fill 128, border 192.
+	LeaMapsZoom.BLOB_FILL_ALPHA   = 64
+	LeaMapsZoom.BLOB_BORDER_ALPHA = 192
+
 	LeaMapsZoom.ENABLEPERSISTZOOM_DEFAULT  = false
 	LeaMapsZoom.ENABLEOLDPARTYICONS_DEFAULT = false
 	LeaMapsZoom.MAXZOOM_DEFAULT            = 4.0
@@ -63,6 +73,12 @@
 
 	local function resizePOI(poiButton)
 		if poiButton then
+			-- Keep quest POI buttons above the objective blob frame (the
+			-- glow itself is composited over the UI by Ascension's client
+			-- and cannot be out-layered; see BLOB_FILL_ALPHA above)
+			if WorldMapBlobFrame and poiButton:GetFrameLevel() <= WorldMapBlobFrame:GetFrameLevel() then
+				poiButton:SetFrameLevel(WorldMapBlobFrame:GetFrameLevel() + 2)
+			end
 			local _, _, _, x, y = poiButton:GetPoint()
 			local mapsterScale = 1
 			local mapster, mapsterPoiScale = LeaMapsZoom.GetMapster("poiScale")
@@ -252,12 +268,38 @@
 		LeaMapsZoom.PreviousState.zone  = GetCurrentMapZone()
 	end
 
-	function LeaMapsZoom.AfterScrollOrPan()
-		LeaMapsZoom.PersistMapScrollAndPan()
+	-- WorldMapBlobFrame (quest objective glow) renders in screen space and
+	-- only repaints on a DrawQuestBlob call, so it must be repainted after
+	-- any move, pan or scale of the map
+	function LeaMapsZoom.RepaintBlob()
 		if WORLDMAP_SETTINGS.selectedQuest then
 			WorldMapBlobFrame:DrawQuestBlob(WORLDMAP_SETTINGS.selectedQuestId, false)
 			WorldMapBlobFrame:DrawQuestBlob(WORLDMAP_SETTINGS.selectedQuestId, true)
 		end
+		WorldMapBlobFrame:SetFillAlpha(LeaMapsZoom.BLOB_FILL_ALPHA)
+		WorldMapBlobFrame:SetBorderAlpha(LeaMapsZoom.BLOB_BORDER_ALPHA)
+	end
+
+	function LeaMapsZoom.AfterScrollOrPan()
+		LeaMapsZoom.PersistMapScrollAndPan()
+		LeaMapsZoom.RepaintBlob()
+	end
+
+	-- Hide the blob while the map window is dragged or scaled (it would
+	-- stay behind at its old screen position) and repaint it afterwards
+	function LeaMapsZoom.BeginWindowDrag()
+		if WorldMapBlobFrame:IsShown() then
+			LeaMapsZoom.blobWasShown = true
+			WorldMapBlobFrame:Hide()
+		end
+	end
+
+	function LeaMapsZoom.EndWindowDrag()
+		if LeaMapsZoom.blobWasShown then
+			LeaMapsZoom.blobWasShown = nil
+			WorldMapBlobFrame:Show()
+		end
+		LeaMapsZoom.RepaintBlob()
 	end
 
 	function LeaMapsZoom.ResizeQuestPOIs()
@@ -429,10 +471,33 @@
 		WorldMapBlobFrame:ClearAllPoints()
 		WorldMapBlobFrame:SetAllPoints(WorldMapDetailFrame)
 
+		-- Reparenting flattens frame levels (SetParent resets each frame to
+		-- parent level + 1), which leaves the blob drawing above the quest
+		-- POI buttons. Reassert Blizzard's stock hierarchy (detail < blob <
+		-- button < POI frame at WORLDMAP_POI_FRAMELEVEL). Never overwrite
+		-- WORLDMAP_POI_FRAMELEVEL: QuestPOI selection code hard-codes it.
+		if WorldMapFrame_ResetFrameLevels then
+			WorldMapFrame_ResetFrameLevels()
+		else
+			WorldMapBlobFrame:SetFrameLevel(WorldMapButton:GetFrameLevel() + 1)
+			WorldMapPOIFrame:SetFrameLevel(WorldMapButton:GetFrameLevel() + 2)
+		end
+
+		WorldMapBlobFrame:SetFillAlpha(LeaMapsZoom.BLOB_FILL_ALPHA)
+		WorldMapBlobFrame:SetBorderAlpha(LeaMapsZoom.BLOB_BORDER_ALPHA)
+
 		WorldMapPlayer:SetParent(WorldMapDetailFrame)
 
 		updatePointRelativeTo(WorldMapQuestScrollFrame,       WorldMapScrollFrame)
 		updatePointRelativeTo(WorldMapQuestDetailScrollFrame, WorldMapScrollFrame)
+
+		-- The quest-list layout is disabled (see Leatrix_Maps.lua), so the
+		-- quest panels must never be visible outside of it
+		if WORLDMAP_SETTINGS.size ~= WORLDMAP_QUESTLIST_SIZE then
+			if WorldMapQuestScrollFrame then WorldMapQuestScrollFrame:Hide() end
+			if WorldMapQuestDetailScrollFrame then WorldMapQuestDetailScrollFrame:Hide() end
+			if WorldMapQuestRewardScrollFrame then WorldMapQuestRewardScrollFrame:Hide() end
+		end
 
 		if LeaMapsZoom.GetElvUI() then
 			LeaMapsZoom.ElvUI_SetupWorldMapFrame()
@@ -469,6 +534,7 @@
 			newScale = min(LeaMapsZoom.MINIMODE_MAX_ZOOM, newScale)
 			WorldMapFrame:SetScale(newScale)
 			WorldMapScreenAnchor.preferredMinimodeScale = newScale
+			LeaMapsZoom.RepaintBlob()
 			return
 		end
 
@@ -506,6 +572,18 @@
 		LeaMapsZoom.AfterScrollOrPan()
 	end
 
+	-- Sync the screen anchor and persist the window position so the main
+	-- addon's OnShow hook restores the map where the player left it
+	function LeaMapsZoom.SaveWindowPosition()
+		WorldMapScreenAnchor:StartMoving()
+		WorldMapScreenAnchor:SetPoint("TOPLEFT", WorldMapFrame)
+		WorldMapScreenAnchor:StopMovingOrSizing()
+		if LeaMapsLC then
+			local a, _, r, x, y = WorldMapFrame:GetPoint()
+			LeaMapsLC["MapPosA"], LeaMapsLC["MapPosR"], LeaMapsLC["MapPosX"], LeaMapsLC["MapPosY"] = a, r, x, y
+		end
+	end
+
 	function LeaMapsZoom.WorldMapButton_OnMouseDown()
 		if arg1 == "LeftButton" and WorldMapScrollFrame.zoomedIn then
 			WorldMapScrollFrame.panning  = true
@@ -515,10 +593,35 @@
 			WorldMapScrollFrame.x        = WorldMapScrollFrame:GetHorizontalScroll()
 			WorldMapScrollFrame.y        = WorldMapScrollFrame:GetVerticalScroll()
 			WorldMapScrollFrame.moved    = false
+		elseif arg1 == "LeftButton"
+			and LeaMapsLC and LeaMapsLC["UnlockMapFrame"] == "On"
+			and WORLDMAP_SETTINGS and WORLDMAP_SETTINGS.size == WORLDMAP_WINDOWED_SIZE then
+			-- Not zoomed in: left-drag on the map canvas moves the window
+			local x, y = GetCursorPosition()
+			WorldMapScrollFrame.dragX = x
+			WorldMapScrollFrame.dragY = y
+			WorldMapScrollFrame.draggingWindow = true
+			LeaMapsZoom.BeginWindowDrag()
+			WorldMapScreenAnchor:ClearAllPoints()
+			WorldMapFrame:ClearAllPoints()
+			WorldMapFrame:StartMoving()
 		end
 	end
 
 	function LeaMapsZoom.WorldMapButton_OnMouseUp()
+		if WorldMapScrollFrame.draggingWindow then
+			WorldMapScrollFrame.draggingWindow = false
+			WorldMapFrame:StopMovingOrSizing()
+			WorldMapFrame:SetUserPlaced(false)
+			LeaMapsZoom.SaveWindowPosition()
+			LeaMapsZoom.EndWindowDrag()
+			-- Barely moved: treat as an ordinary map click (zone navigation)
+			local x, y = GetCursorPosition()
+			if abs(x - (WorldMapScrollFrame.dragX or x)) >= 5
+			or abs(y - (WorldMapScrollFrame.dragY or y)) >= 5 then
+				WorldMapScrollFrame.moved = true
+			end
+		end
 		WorldMapScrollFrame.panning = false
 		if not WorldMapScrollFrame.moved then
 			WorldMapButton_OnClick(WorldMapButton, arg1)
@@ -826,15 +929,16 @@
 
 		-- Title button drag — move the whole frame (keeps anchor in sync)
 		WorldMapTitleButton:SetScript("OnDragStart", function()
+			LeaMapsZoom.BeginWindowDrag()
 			WorldMapScreenAnchor:ClearAllPoints()
 			WorldMapFrame:ClearAllPoints()
 			WorldMapFrame:StartMoving()
 		end)
 		WorldMapTitleButton:SetScript("OnDragStop", function()
 			WorldMapFrame:StopMovingOrSizing()
-			WorldMapScreenAnchor:StartMoving()
-			WorldMapScreenAnchor:SetPoint("TOPLEFT", WorldMapFrame)
-			WorldMapScreenAnchor:StopMovingOrSizing()
+			WorldMapFrame:SetUserPlaced(false)
+			LeaMapsZoom.SaveWindowPosition()
+			LeaMapsZoom.EndWindowDrag()
 		end)
 
 		WorldMapButton:SetScript("OnUpdate", LeaMapsZoom.WorldMapButton_OnUpdate)

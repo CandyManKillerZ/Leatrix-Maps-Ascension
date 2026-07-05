@@ -1,11 +1,14 @@
-# Leatrix Maps (WoW 3.3.5a)
+# Leatrix Maps for Ascension WoW (3.3.5a)
 
-A feature-rich world map enhancement addon for World of Warcraft 3.3.5a,
-backported from Leatrix Maps for WOTLK Classic
+A feature-rich world map enhancement addon for [Project Ascension](https://ascension.gg),
+forked from the [3.3.5a backport](https://github.com/5Buttons/Leatrix-Maps-3.3.5) of Leatrix Maps for WOTLK Classic.
 
+## Ascension-specific fixes in this fork
 
-
-As a disclaimer this addon was about 90% vibecoded, but so far the result is better than expected and I wanted to share it. Feel free to report any issues.
+- **Custom zones render correctly** — zones without fog-reveal data (Ascension custom content) fall back to normal map rendering instead of appearing unexplored
+- **Map window can be dragged** — left-drag anywhere on the map canvas (when not zoomed in) or the title bar moves the window; position persists across sessions
+- **Quest objective glow follows the map** — the blue objective glow repaints correctly when the map window is moved or scaled (Ascension's client composites it over the UI, so it is also softened to keep the numbered quest icons readable)
+- **No more stray quest panels** — the fullscreen quest-list layout (quest list and detail panels beside/below the map) is disabled; quest POIs on the map are unaffected
 
 ---
 <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/820f87a4-acbc-47be-b635-b696ed80e0ea" />

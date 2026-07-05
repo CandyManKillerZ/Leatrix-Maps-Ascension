@@ -1137,7 +1137,14 @@
 		local _origGNMO = GetNumMapOverlays
 		GetNumMapOverlays = function()
 			if NUM_WORLDMAP_OVERLAYS == 0 then return _origGNMO() end
-			if LeaMapsLC and LeaMapsLC["RevealMaps"] == "On" then return 0 end
+			if LeaMapsLC and LeaMapsLC["RevealMaps"] == "On" then
+				-- Only take over overlay rendering for maps we have errata for.
+				-- Custom zones (e.g. Ascension content) fall through to Blizzard's
+				-- own path so their discovered overlays still render normally.
+				local mapFileName = GetMapInfo()
+				local overlayMap = mapFileName and rawget(errata, mapFileName)
+				if overlayMap and next(overlayMap) then return 0 end
+			end
 			return _origGNMO()
 		end
 
