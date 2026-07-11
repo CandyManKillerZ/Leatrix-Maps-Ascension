@@ -80,13 +80,8 @@
 				poiButton:SetFrameLevel(WorldMapBlobFrame:GetFrameLevel() + 2)
 			end
 			local _, _, _, x, y = poiButton:GetPoint()
-			local mapsterScale = 1
-			local mapster, mapsterPoiScale = LeaMapsZoom.GetMapster("poiScale")
-			if mapster then
-				mapster.WorldMapFrame_DisplayQuestPOI = function() end
-			end
 			if x ~= nil and y ~= nil then
-				local s = WORLDMAP_SETTINGS.size / WorldMapDetailFrame:GetEffectiveScale() * (mapsterScale or 1)
+				local s = WORLDMAP_SETTINGS.size / WorldMapDetailFrame:GetEffectiveScale()
 				local posX = x * 1 / s
 				local posY = y * 1 / s
 				poiButton:SetScale(s)
@@ -316,6 +311,7 @@
 		if QUEST_POI_SWAP_BUTTONS then
 			resizePOI(QUEST_POI_SWAP_BUTTONS["WorldMapPOIFrame"])
 		end
+		LeaMapsZoom._resizedAtScale = WorldMapDetailFrame:GetEffectiveScale()
 	end
 
 	function LeaMapsZoom.SetPOIMaxBounds()
@@ -361,7 +357,10 @@
 			end
 		end
 
-		WorldMapFrame_OnEvent(WorldMapFrame, "DISPLAY_SIZE_CHANGED")
+		-- Do NOT fire the DISPLAY_SIZE_CHANGED event here: its handler also
+		-- calls WorldMapFrame_UpdateQuests, doubling the heaviest part of
+		-- every rescale. Reproduce its only other effect directly.
+		WorldMapQuestShowObjectives_AdjustPosition()
 		if WorldMapFrame_UpdateQuests() > 0 then
 			LeaMapsZoom.RedrawSelectedQuest()
 		end
@@ -451,15 +450,24 @@
 
 		WorldMapScrollFrame:SetScale(WORLDMAP_SETTINGS.size)
 
-		LeaMapsZoom.SetDetailFrameScale(1)
-		WorldMapDetailFrame:SetAllPoints(WorldMapScrollFrame)
-		WorldMapScrollFrame:SetHorizontalScroll(0)
-		WorldMapScrollFrame:SetVerticalScroll(0)
+		-- Cache Mapster's arrow scale once per setup (used every frame in
+		-- WorldMapButton_OnUpdate)
+		local _, mapsterArrowScale = LeaMapsZoom.GetMapster("arrowScale")
+		LeaMapsZoom._arrowScale = mapsterArrowScale or 1
 
-		if MagnifyOptions.enablePersistZoom and GetCurrentMapZone() == LeaMapsZoom.PreviousState.zone then
-			LeaMapsZoom.SetDetailFrameScale(LeaMapsZoom.PreviousState.scale)
+		-- Pick the target scale up front: SetDetailFrameScale runs a full
+		-- quest update, so calling it twice (1 then persisted) doubled the
+		-- map-open cost whenever persist zoom was active
+		local persistZoom = MagnifyOptions.enablePersistZoom
+			and GetCurrentMapZone() == LeaMapsZoom.PreviousState.zone
+		LeaMapsZoom.SetDetailFrameScale(persistZoom and LeaMapsZoom.PreviousState.scale or 1)
+		WorldMapDetailFrame:SetAllPoints(WorldMapScrollFrame)
+		if persistZoom then
 			WorldMapScrollFrame:SetHorizontalScroll(LeaMapsZoom.PreviousState.panX)
 			WorldMapScrollFrame:SetVerticalScroll(LeaMapsZoom.PreviousState.panY)
+		else
+			WorldMapScrollFrame:SetHorizontalScroll(0)
+			WorldMapScrollFrame:SetVerticalScroll(0)
 		end
 
 		WorldMapButton:SetScale(1)
@@ -691,10 +699,13 @@
 			ShowWorldMapArrowFrame(nil)
 			WorldMapPlayer:SetAllPoints(PlayerArrowFrame)
 			WorldMapPlayer.Icon:SetRotation(PlayerArrowFrame:GetFacing())
-			local _, mapsterArrowScale = LeaMapsZoom.GetMapster("arrowScale")
-			WorldMapPlayer.Icon:SetSize(
-				LeaMapsZoom.PLAYER_ARROW_SIZE * (mapsterArrowScale or 1),
-				LeaMapsZoom.PLAYER_ARROW_SIZE * (mapsterArrowScale or 1))
+			-- Arrow scale is cached in SetupWorldMapFrame — looking Mapster
+			-- up through LibStub every frame caused measurable overhead
+			local arrowSize = LeaMapsZoom.PLAYER_ARROW_SIZE * (LeaMapsZoom._arrowScale or 1)
+			if LeaMapsZoom._lastArrowSize ~= arrowSize then
+				LeaMapsZoom._lastArrowSize = arrowSize
+				WorldMapPlayer.Icon:SetSize(arrowSize, arrowSize)
+			end
 			WorldMapPlayer:Show()
 		end
 
@@ -860,6 +871,11 @@
 	-- Blizzard has reset the button anchors.)
 	function LeaMapsZoom.RefreshQuestPOIs()
 		if WorldMapFrame:IsShown() and WorldMapFrame_UpdateQuests then
+			-- Sizes are already correct for the current scale — skip the
+			-- (expensive) quest update entirely
+			if LeaMapsZoom._resizedAtScale == WorldMapDetailFrame:GetEffectiveScale() then
+				return
+			end
 			if (WorldMapFrame_UpdateQuests() or 0) > 0 then
 				LeaMapsZoom.RedrawSelectedQuest()
 			end
@@ -898,6 +914,14 @@
 		MagnifyOptions.enableOldPartyIcons = MagnifyOptions.enableOldPartyIcons or LeaMapsZoom.ENABLEOLDPARTYICONS_DEFAULT
 		MagnifyOptions.maxZoom             = MagnifyOptions.maxZoom             or LeaMapsZoom.MAXZOOM_DEFAULT
 		MagnifyOptions.zoomStep            = MagnifyOptions.zoomStep            or LeaMapsZoom.ZOOMSTEP_DEFAULT
+
+		-- Mapster compatibility: disable its POI handling once here (this
+		-- was previously re-applied for every POI button on every quest
+		-- update, with a LibStub lookup each time)
+		local mapster = LeaMapsZoom.GetMapster()
+		if mapster then
+			mapster.WorldMapFrame_DisplayQuestPOI = function() end
+		end
 
 		WorldMapScrollFrame:SetScrollChild(WorldMapDetailFrame)
 		WorldMapScrollFrame:SetScript("OnMouseWheel", LeaMapsZoom.WorldMapScrollFrame_OnMouseWheel)
