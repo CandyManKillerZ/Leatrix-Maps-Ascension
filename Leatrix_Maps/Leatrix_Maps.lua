@@ -238,7 +238,12 @@
 		-- by the view).
 		if WorldMapFrame_SetQuestMapView and WorldMapFrame_SetFullMapView then
 			WorldMapFrame_SetQuestMapView = function()
-				WorldMapFrame_SetFullMapView()
+				-- Called from WorldMapFrame_DisplayQuests on every quest log
+				-- update while the map is shown — only relayout when actually
+				-- escaping the quest-list size, never as a no-op relayout
+				if WORLDMAP_SETTINGS and WORLDMAP_SETTINGS.size == WORLDMAP_QUESTLIST_SIZE then
+					WorldMapFrame_SetFullMapView()
+				end
 			end
 		end
 

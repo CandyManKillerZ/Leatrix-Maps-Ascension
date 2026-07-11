@@ -422,6 +422,8 @@
 		WorldMapScrollFrame:EnableMouse(true)
 		WorldMapScrollFrame.panning = false
 		WorldMapScrollFrame.moved   = false
+		WorldMapScrollFrame.pendingWindowDrag = false
+		WorldMapScrollFrame.draggingWindow    = false
 
 		if WORLDMAP_SETTINGS.size == WORLDMAP_QUESTLIST_SIZE then
 			WorldMapScrollFrame:SetPoint("TOPLEFT", WorldMapPositioningGuide, "TOP", -726, -99)
@@ -605,31 +607,28 @@
 		elseif arg1 == "LeftButton"
 			and LeaMapsLC and LeaMapsLC["UnlockMapFrame"] == "On"
 			and WORLDMAP_SETTINGS and WORLDMAP_SETTINGS.size == WORLDMAP_WINDOWED_SIZE then
-			-- Not zoomed in: left-drag on the map canvas moves the window
+			-- Not zoomed in: left-drag on the map canvas moves the window.
+			-- StartMoving is deferred until the cursor travels a few pixels
+			-- (see WorldMapButton_OnUpdate) so a plain click never nudges
+			-- the window or blinks the objective glow
 			local x, y = GetCursorPosition()
 			WorldMapScrollFrame.dragX = x
 			WorldMapScrollFrame.dragY = y
-			WorldMapScrollFrame.draggingWindow = true
-			LeaMapsZoom.BeginWindowDrag()
-			WorldMapScreenAnchor:ClearAllPoints()
-			WorldMapFrame:ClearAllPoints()
-			WorldMapFrame:StartMoving()
+			WorldMapScrollFrame.pendingWindowDrag = true
 		end
 	end
 
 	function LeaMapsZoom.WorldMapButton_OnMouseUp()
+		WorldMapScrollFrame.pendingWindowDrag = false
 		if WorldMapScrollFrame.draggingWindow then
 			WorldMapScrollFrame.draggingWindow = false
 			WorldMapFrame:StopMovingOrSizing()
 			WorldMapFrame:SetUserPlaced(false)
 			LeaMapsZoom.SaveWindowPosition()
 			LeaMapsZoom.EndWindowDrag()
-			-- Barely moved: treat as an ordinary map click (zone navigation)
-			local x, y = GetCursorPosition()
-			if abs(x - (WorldMapScrollFrame.dragX or x)) >= 5
-			or abs(y - (WorldMapScrollFrame.dragY or y)) >= 5 then
-				WorldMapScrollFrame.moved = true
-			end
+			-- The drag only starts after the movement threshold, so this
+			-- was a real drag, never a click
+			WorldMapScrollFrame.moved = true
 		end
 		WorldMapScrollFrame.panning = false
 		if not WorldMapScrollFrame.moved then
@@ -648,6 +647,20 @@
 	----------------------------------------------------------------------
 
 	function LeaMapsZoom.WorldMapButton_OnUpdate(self, elapsed)
+		-- Deferred window-drag start (see WorldMapButton_OnMouseDown)
+		if WorldMapScrollFrame.pendingWindowDrag then
+			local px, py = GetCursorPosition()
+			if abs(px - (WorldMapScrollFrame.dragX or px)) >= 5
+			or abs(py - (WorldMapScrollFrame.dragY or py)) >= 5 then
+				WorldMapScrollFrame.pendingWindowDrag = false
+				WorldMapScrollFrame.draggingWindow = true
+				LeaMapsZoom.BeginWindowDrag()
+				WorldMapScreenAnchor:ClearAllPoints()
+				WorldMapFrame:ClearAllPoints()
+				WorldMapFrame:StartMoving()
+			end
+		end
+
 		local x, y = GetCursorPosition()
 		x = x / self:GetEffectiveScale()
 		y = y / self:GetEffectiveScale()
