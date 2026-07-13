@@ -418,7 +418,14 @@
 
 	function LeaMapsZoom.SetupWorldMapFrame()
 		WorldMapScrollFrameScrollBar:Hide()
-		WorldMapFrame:EnableMouse(true)
+		-- WorldMapFrame is protected: touching it from addon code in combat
+		-- is blocked AND aborts this whole function, leaving the map half
+		-- set up. Skip protected calls in combat; the main addon re-runs
+		-- setup on PLAYER_REGEN_ENABLED.
+		local canTouchMapFrame = not InCombatLockdown()
+		if canTouchMapFrame then
+			WorldMapFrame:EnableMouse(true)
+		end
 		WorldMapScrollFrame:EnableMouse(true)
 		WorldMapScrollFrame.panning = false
 		WorldMapScrollFrame.moved   = false
@@ -430,9 +437,11 @@
 			WorldMapTrackQuest:SetPoint("BOTTOMLEFT", WorldMapPositioningGuide, "BOTTOMLEFT", 8, 4)
 		elseif WORLDMAP_SETTINGS.size == WORLDMAP_WINDOWED_SIZE then
 			WorldMapTrackQuest:SetPoint("BOTTOMLEFT", WorldMapPositioningGuide, "BOTTOMLEFT", 16, -9)
-			WorldMapFrame:SetPoint("TOPLEFT", WorldMapScreenAnchor, 0, 0)
-			WorldMapFrame:SetScale(WorldMapScreenAnchor.preferredMinimodeScale)
-			WorldMapFrame:SetMovable("true")
+			if canTouchMapFrame then
+				WorldMapFrame:SetPoint("TOPLEFT", WorldMapScreenAnchor, 0, 0)
+				WorldMapFrame:SetScale(WorldMapScreenAnchor.preferredMinimodeScale)
+				WorldMapFrame:SetMovable("true")
+			end
 			WorldMapTitleButton:Show()
 			WorldMapTitleButton:ClearAllPoints()
 			WorldMapFrameTitle:Show()
@@ -604,7 +613,7 @@
 			WorldMapScrollFrame.x        = WorldMapScrollFrame:GetHorizontalScroll()
 			WorldMapScrollFrame.y        = WorldMapScrollFrame:GetVerticalScroll()
 			WorldMapScrollFrame.moved    = false
-		elseif arg1 == "LeftButton"
+		elseif arg1 == "LeftButton" and not InCombatLockdown()
 			and LeaMapsLC and LeaMapsLC["UnlockMapFrame"] == "On"
 			and WORLDMAP_SETTINGS and WORLDMAP_SETTINGS.size == WORLDMAP_WINDOWED_SIZE then
 			-- Not zoomed in: left-drag on the map canvas moves the window.
@@ -622,9 +631,11 @@
 		WorldMapScrollFrame.pendingWindowDrag = false
 		if WorldMapScrollFrame.draggingWindow then
 			WorldMapScrollFrame.draggingWindow = false
-			WorldMapFrame:StopMovingOrSizing()
-			WorldMapFrame:SetUserPlaced(false)
-			LeaMapsZoom.SaveWindowPosition()
+			if not InCombatLockdown() then
+				WorldMapFrame:StopMovingOrSizing()
+				WorldMapFrame:SetUserPlaced(false)
+				LeaMapsZoom.SaveWindowPosition()
+			end
 			LeaMapsZoom.EndWindowDrag()
 			-- The drag only starts after the movement threshold, so this
 			-- was a real drag, never a click
@@ -650,7 +661,9 @@
 		-- Deferred window-drag start (see WorldMapButton_OnMouseDown)
 		if WorldMapScrollFrame.pendingWindowDrag then
 			local px, py = GetCursorPosition()
-			if abs(px - (WorldMapScrollFrame.dragX or px)) >= 5
+			if InCombatLockdown() then
+				WorldMapScrollFrame.pendingWindowDrag = false
+			elseif abs(px - (WorldMapScrollFrame.dragX or px)) >= 5
 			or abs(py - (WorldMapScrollFrame.dragY or py)) >= 5 then
 				WorldMapScrollFrame.pendingWindowDrag = false
 				WorldMapScrollFrame.draggingWindow = true
@@ -982,12 +995,17 @@
 
 		-- Title button drag — move the whole frame (keeps anchor in sync)
 		WorldMapTitleButton:SetScript("OnDragStart", function()
+			if InCombatLockdown() then return end
+			LeaMapsZoom._titleDragging = true
 			LeaMapsZoom.BeginWindowDrag()
 			WorldMapScreenAnchor:ClearAllPoints()
 			WorldMapFrame:ClearAllPoints()
 			WorldMapFrame:StartMoving()
 		end)
 		WorldMapTitleButton:SetScript("OnDragStop", function()
+			if not LeaMapsZoom._titleDragging then return end
+			LeaMapsZoom._titleDragging = nil
+			if InCombatLockdown() then return end
 			WorldMapFrame:StopMovingOrSizing()
 			WorldMapFrame:SetUserPlaced(false)
 			LeaMapsZoom.SaveWindowPosition()
@@ -996,10 +1014,10 @@
 
 		WorldMapButton:SetScript("OnUpdate", LeaMapsZoom.WorldMapButton_OnUpdate)
 
-		-- Wrap Blizzard's OnShow so SetupWorldMapFrame fires on every map open
-		local original_WorldMapFrame_OnShow = WorldMapFrame:GetScript("OnShow")
-		WorldMapFrame:SetScript("OnShow", function(self)
-			original_WorldMapFrame_OnShow(self)
+		-- Run SetupWorldMapFrame after Blizzard's OnShow on every map open.
+		-- HookScript (NOT a SetScript wrapper) keeps Blizzard's own OnShow
+		-- untainted, so its protected calls still work in combat
+		WorldMapFrame:HookScript("OnShow", function()
 			LeaMapsZoom.SetupWorldMapFrame()
 		end)
 

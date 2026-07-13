@@ -938,14 +938,19 @@
 		WorldMapFrame:SetToplevel(true)
 		WorldMapFrame:SetClampedToScreen(false)
 		WorldMapFrame:RegisterForDrag("LeftButton")
+		local borderDragging = false
 		WorldMapFrame:SetScript("OnDragStart", function()
-			if LeaMapsLC["UnlockMapFrame"] == "On" and
+			if not InCombatLockdown() and LeaMapsLC["UnlockMapFrame"] == "On" and
 			   WORLDMAP_SETTINGS and WORLDMAP_SETTINGS.size == WORLDMAP_WINDOWED_SIZE then
+				borderDragging = true
 				if LeaMapsZoom and LeaMapsZoom.BeginWindowDrag then LeaMapsZoom.BeginWindowDrag() end
 				WorldMapFrame:StartMoving()
 			end
 		end)
 		WorldMapFrame:SetScript("OnDragStop", function()
+			if not borderDragging then return end
+			borderDragging = false
+			if InCombatLockdown() then return end
 			WorldMapFrame:StopMovingOrSizing()
 			WorldMapFrame:SetUserPlaced(false)
 			LeaMapsLC["MapPosA"], void, LeaMapsLC["MapPosR"], LeaMapsLC["MapPosX"], LeaMapsLC["MapPosY"] = WorldMapFrame:GetPoint()
@@ -959,8 +964,11 @@
 			SetCVar("miniWorldMap", "1")
 		end
 
-		-- Restore saved scale and position every time the map is shown
-		WorldMapFrame:HookScript("OnShow", function()
+		-- Restore saved scale and position every time the map is shown.
+		-- WorldMapFrame is protected, so this cannot run in combat — the
+		-- map opens at Blizzard's position instead and is put back the
+		-- moment combat ends.
+		local function RestoreMapPositionAndScale()
 			if LeaMapsDB["MapScale"] then
 				WorldMapFrame:SetScale(LeaMapsDB["MapScale"])
 			end
@@ -969,6 +977,25 @@
 			if WorldMapTitleButton_OnDragStop then WorldMapTitleButton_OnDragStop() end
 			-- Quest POI sizes were computed before the scale change above
 			if LeaMapsZoom and LeaMapsZoom.RefreshQuestPOIs then LeaMapsZoom.RefreshQuestPOIs() end
+		end
+
+		local combatWatcher = CreateFrame("Frame")
+		combatWatcher:SetScript("OnEvent", function()
+			combatWatcher:UnregisterEvent("PLAYER_REGEN_ENABLED")
+			if WorldMapFrame:IsShown() then
+				if LeaMapsZoom and LeaMapsZoom.SetupWorldMapFrame then
+					LeaMapsZoom.SetupWorldMapFrame()
+				end
+				RestoreMapPositionAndScale()
+			end
+		end)
+
+		WorldMapFrame:HookScript("OnShow", function()
+			if InCombatLockdown() then
+				combatWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+				return
+			end
+			RestoreMapPositionAndScale()
 		end)
 
 		-- ElvUI: restore mouse (ElvUI noops EnableMouse) and hide its backdrop
@@ -1515,6 +1542,7 @@
 			scaleMouse:SetScript("OnLeave", function() scaleHandleTex:SetDesaturated(true)  end)
 
 			scaleMouse:SetScript("OnMouseDown", function(frame)
+				if InCombatLockdown() then return end
 				if LeaMapsZoom and LeaMapsZoom.BeginWindowDrag then LeaMapsZoom.BeginWindowDrag() end
 				mapLeft          = WorldMapFrame:GetLeft()
 				mapTop           = WorldMapFrame:GetTop()
