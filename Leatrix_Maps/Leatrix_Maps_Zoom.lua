@@ -34,6 +34,18 @@
 	LeaMapsZoom.BLOB_FILL_ALPHA   = 64
 	LeaMapsZoom.BLOB_BORDER_ALPHA = 192
 
+	-- Re-runs the full map setup after combat ends. Setup cannot run in
+	-- combat: WorldMapFrame is protected and protection covers its entire
+	-- child tree (scroll frame, detail frame, POI buttons, ...)
+	LeaMapsZoom._combatWatcher = CreateFrame("Frame")
+	LeaMapsZoom._combatWatcher:SetScript("OnEvent", function(self)
+		self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+		if WorldMapFrame:IsShown() then
+			LeaMapsZoom.SetupWorldMapFrame()
+			if LeaMapsZoom.OnCombatEndRestore then LeaMapsZoom.OnCombatEndRestore() end
+		end
+	end)
+
 	LeaMapsZoom.ENABLEPERSISTZOOM_DEFAULT  = false
 	LeaMapsZoom.ENABLEOLDPARTYICONS_DEFAULT = false
 	LeaMapsZoom.MAXZOOM_DEFAULT            = 4.0
@@ -298,6 +310,10 @@
 	end
 
 	function LeaMapsZoom.ResizeQuestPOIs()
+		-- POI buttons are children of the protected WorldMapFrame tree —
+		-- resizing them in combat is blocked (this runs off Blizzard's
+		-- quest update events, which fire during combat)
+		if InCombatLockdown() then return end
 		-- Bounds are set by SetPOIMaxBounds (called from SetDetailFrameScale).
 		-- If the map hasn't been set up yet the first time, skip to avoid nil compare.
 		if not LeaMapsZoom.worldmapPoiMaxY then return end
@@ -417,15 +433,15 @@
 	----------------------------------------------------------------------
 
 	function LeaMapsZoom.SetupWorldMapFrame()
-		WorldMapScrollFrameScrollBar:Hide()
-		-- WorldMapFrame is protected: touching it from addon code in combat
-		-- is blocked AND aborts this whole function, leaving the map half
-		-- set up. Skip protected calls in combat; the main addon re-runs
-		-- setup on PLAYER_REGEN_ENABLED.
-		local canTouchMapFrame = not InCombatLockdown()
-		if canTouchMapFrame then
-			WorldMapFrame:EnableMouse(true)
+		-- The entire WorldMapFrame tree is protected: no addon code may
+		-- touch any of it in combat. Skip everything and redo the setup
+		-- (plus position restore) the moment combat ends.
+		if InCombatLockdown() then
+			LeaMapsZoom._combatWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+			return
 		end
+		WorldMapScrollFrameScrollBar:Hide()
+		WorldMapFrame:EnableMouse(true)
 		WorldMapScrollFrame:EnableMouse(true)
 		WorldMapScrollFrame.panning = false
 		WorldMapScrollFrame.moved   = false
@@ -437,11 +453,9 @@
 			WorldMapTrackQuest:SetPoint("BOTTOMLEFT", WorldMapPositioningGuide, "BOTTOMLEFT", 8, 4)
 		elseif WORLDMAP_SETTINGS.size == WORLDMAP_WINDOWED_SIZE then
 			WorldMapTrackQuest:SetPoint("BOTTOMLEFT", WorldMapPositioningGuide, "BOTTOMLEFT", 16, -9)
-			if canTouchMapFrame then
-				WorldMapFrame:SetPoint("TOPLEFT", WorldMapScreenAnchor, 0, 0)
-				WorldMapFrame:SetScale(WorldMapScreenAnchor.preferredMinimodeScale)
-				WorldMapFrame:SetMovable("true")
-			end
+			WorldMapFrame:SetPoint("TOPLEFT", WorldMapScreenAnchor, 0, 0)
+			WorldMapFrame:SetScale(WorldMapScreenAnchor.preferredMinimodeScale)
+			WorldMapFrame:SetMovable("true")
 			WorldMapTitleButton:Show()
 			WorldMapTitleButton:ClearAllPoints()
 			WorldMapFrameTitle:Show()
@@ -545,6 +559,8 @@
 	end
 
 	function LeaMapsZoom.WorldMapScrollFrame_OnMouseWheel()
+		-- Zooming rescales protected frames — blocked in combat
+		if InCombatLockdown() then return end
 		-- Ctrl+scroll in mini mode: zoom the whole frame
 		if IsControlKeyDown() and WORLDMAP_SETTINGS.size == WORLDMAP_WINDOWED_SIZE then
 			local oldScale = WorldMapFrame:GetScale()
@@ -896,6 +912,7 @@
 	-- resizePOI directly here — its position math is only valid right after
 	-- Blizzard has reset the button anchors.)
 	function LeaMapsZoom.RefreshQuestPOIs()
+		if InCombatLockdown() then return end
 		if WorldMapFrame:IsShown() and WorldMapFrame_UpdateQuests then
 			-- Sizes are already correct for the current scale — skip the
 			-- (expensive) quest update entirely

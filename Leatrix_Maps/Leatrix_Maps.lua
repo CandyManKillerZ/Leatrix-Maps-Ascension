@@ -979,20 +979,18 @@
 			if LeaMapsZoom and LeaMapsZoom.RefreshQuestPOIs then LeaMapsZoom.RefreshQuestPOIs() end
 		end
 
-		local combatWatcher = CreateFrame("Frame")
-		combatWatcher:SetScript("OnEvent", function()
-			combatWatcher:UnregisterEvent("PLAYER_REGEN_ENABLED")
-			if WorldMapFrame:IsShown() then
-				if LeaMapsZoom and LeaMapsZoom.SetupWorldMapFrame then
-					LeaMapsZoom.SetupWorldMapFrame()
-				end
-				RestoreMapPositionAndScale()
-			end
-		end)
+		-- After-combat restore runs through the zoom module's combat
+		-- watcher (SetupWorldMapFrame arms it whenever it must skip work
+		-- in combat); it calls back here to reapply position and scale
+		if LeaMapsZoom then
+			LeaMapsZoom.OnCombatEndRestore = RestoreMapPositionAndScale
+		end
 
 		WorldMapFrame:HookScript("OnShow", function()
 			if InCombatLockdown() then
-				combatWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+				if LeaMapsZoom and LeaMapsZoom._combatWatcher then
+					LeaMapsZoom._combatWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+				end
 				return
 			end
 			RestoreMapPositionAndScale()
