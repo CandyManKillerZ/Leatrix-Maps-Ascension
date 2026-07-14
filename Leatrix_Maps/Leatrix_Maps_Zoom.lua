@@ -695,6 +695,9 @@
 		y = y / self:GetEffectiveScale()
 
 		local centerX, centerY = self:GetCenter()
+		-- The rect can be momentarily unresolved (e.g. right after a layout
+		-- change, or while combat lockdown skipped the setup pass)
+		if not centerX then return end
 		local width  = self:GetWidth()
 		local height = self:GetHeight()
 		local adjustedY = (centerY + (height / 2) - y) / height
