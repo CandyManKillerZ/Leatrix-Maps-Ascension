@@ -1,0 +1,62 @@
+diff --git a/Magnify/Main.lua b/Magnify/Main.lua
+index f762435..e2a69b3 100644
+--- a/Magnify/Main.lua
++++ b/Magnify/Main.lua
+@@ -174,6 +174,9 @@ function Magnify.ElvUI_SetupWorldMapFrame()
+ end
+ 
+ function Magnify.SetupWorldMapFrame()
++    -- Leatrix Maps compatibility: see Magnify.OnEvent (also guards the
++    -- direct call from Modules/Map.lua SafeResetWorldMapFrames)
++    if Magnify.standDown then return end
+     WorldMapScrollFrameScrollBar:Hide()
+     WorldMapFrame:EnableMouse(true)
+     WorldMapScrollFrame:EnableMouse(true)
+@@ -669,6 +672,47 @@ end
+ 
+ function Magnify.OnEvent(self, event, addonName)
+     if event == "ADDON_LOADED" and addonName == LOAD_ADDON_NAME then
++        -- Leatrix Maps compatibility: Leatrix's zoom module is a port of this
++        -- same Magnify addon. Running both remodels the same Blizzard map
++        -- frames twice (competing WorldMapButton scripts, OnShow re-anchors),
++        -- and this addon's Frames.xml creates a SECOND frame named
++        -- WorldMapScrollFrame that shadows Leatrix's global, so Leatrix wires
++        -- its zoom into the wrong frame. Result: immovable map window that
++        -- snaps back to its anchor spot. When Leatrix Maps is present, stand
++        -- down completely and give the shadowed globals back to Leatrix's
++        -- frames (this event fires before Leatrix's PLAYER_ENTERING_WORLD
++        -- setup reads them). Loot pins are unaffected: they anchor to
++        -- WorldMapDetailFrame, which Leatrix pans/zooms the same way.
++        if IsAddOnLoaded and IsAddOnLoaded("Leatrix_Maps") then
++            Magnify.standDown = true
++            local ours = _G.WorldMapScrollFrame
++            -- Find the first-created frame with this name (Leatrix's; ours
++            -- was created later and stole the global name)
++            local leatrixScroll
++            local f = EnumerateFrames()
++            while f do
++                if f:GetName() == "WorldMapScrollFrame" then
++                    leatrixScroll = f
++                    break
++                end
++                f = EnumerateFrames(f)
++            end
++            if leatrixScroll and ours and leatrixScroll ~= ours then
++                ours:Hide()
++                ours:EnableMouse(false)
++                ours:EnableMouseWheel(false)
++                _G.WorldMapScrollFrame = leatrixScroll
++                -- The FauxScrollFrameTemplate scrollbar global collides too
++                local kids = { leatrixScroll:GetChildren() }
++                for i = 1, #kids do
++                    if kids[i].GetObjectType and kids[i]:GetObjectType() == "Slider" then
++                        _G.WorldMapScrollFrameScrollBar = kids[i]
++                        break
++                    end
++                end
++            end
++            return
++        end
+         Magnify.OnFirstLoad()
+         Magnify.InitOptions()
+     end
