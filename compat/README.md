@@ -18,13 +18,24 @@ map frames:
 - Its OnShow wrapper runs `Magnify.SetupWorldMapFrame()` **after** Leatrix's
   position restore on every map open, re-anchoring `WorldMapFrame` to its own
   `WorldMapScreenAnchor` (default top-left) with its own scale.
+- `Modules/Map.lua`'s `SafeResetWorldMapFrames()` (fired from the
+  `WorldMapFrame` Show/Hide hooks) forces `WorldMapDetailFrame` scale back to
+  `1.0`, scroll to `0`, and clears `zoomedIn`. This yanks the map back to
+  un-zoomed on the next `Show` after a wheel-zoom, so **the map won't zoom —
+  it snaps straight back to the previous zoom level.**
 
 **Fix:** `lootcollector-magnify-standdown.patch` — apply to the LootCollector
-folder. When `Leatrix_Maps` is loaded, the embedded Magnify stands down
-entirely and hands the shadowed `WorldMapScrollFrame` /
-`WorldMapScrollFrameScrollBar` globals back to Leatrix's frames. Loot pins
-keep working: they anchor to `WorldMapDetailFrame`, which Leatrix pans and
-zooms the same way.
+folder. When `Leatrix_Maps` is loaded, two things stand down:
+
+- the embedded Magnify (`Magnify/Main.lua`) stands down entirely and hands the
+  shadowed `WorldMapScrollFrame` / `WorldMapScrollFrameScrollBar` globals back
+  to Leatrix's frames (fixes the immovable window);
+- `Map.lua`'s `SafeResetWorldMapFrames()` becomes a no-op (fixes the zoom
+  snap-back).
+
+Loot pins keep working in both cases: they anchor to `WorldMapDetailFrame`,
+which Leatrix pans and zooms the same way.
 
 **Re-apply after every LootCollector update** (the patch modifies
-`LootCollector/Magnify/Main.lua` in place), or PR it upstream.
+`LootCollector/Magnify/Main.lua` and `LootCollector/Modules/Map.lua` in
+place), or PR it upstream.

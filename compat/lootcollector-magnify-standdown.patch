@@ -60,3 +60,27 @@ index f762435..e2a69b3 100644
          Magnify.OnFirstLoad()
          Magnify.InitOptions()
      end
+diff --git a/Modules/Map.lua b/Modules/Map.lua
+index b9678c0..14b47d8 100644
+--- a/Modules/Map.lua
++++ b/Modules/Map.lua
+@@ -592,6 +592,19 @@ end
+ 
+ 
+ function Map:SafeResetWorldMapFrames()
++    -- Leatrix Maps compatibility: when Leatrix owns the map, it manages the
++    -- zoom/scroll of WorldMapDetailFrame/WorldMapScrollFrame itself. This
++    -- reset (fired from the WorldMapFrame Show/Hide hooks) forces scale back
++    -- to 1.0 and scroll to 0 and clears zoomedIn, which yanks the map back
++    -- to un-zoomed on the next Show that fires after a wheel-zoom — the map
++    -- appears to "snap back" whenever you try to zoom. Stand down entirely
++    -- and let Leatrix's own OnShow setup handle it. Loot pins redraw at
++    -- whatever zoom Leatrix sets (they read WorldMapDetailFrame geometry).
++    local LeaMagnify = _G.LootCollectorMagnify
++    if (LeaMagnify and LeaMagnify.standDown)
++    or (IsAddOnLoaded and IsAddOnLoaded("Leatrix_Maps")) then
++        return
++    end
+     -- Manual emergency reset. This is intentionally NOT called automatically anymore,
+     -- because embedded Magnify owns the map zoom/pan behavior using WorldMapScrollFrame.
+     if WorldMapScrollFrame then
