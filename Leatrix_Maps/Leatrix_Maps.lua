@@ -230,19 +230,34 @@
 		-- Initialise fog-of-war reveal feature (Leatrix_Maps_Reveal.lua)
 		LeaMapsFC.Setup()
 
-		-- Ascension: the fullscreen map with objectives enabled auto-switches
-		-- to the quest-list layout (quest list + detail panels beside/below
-		-- the map). That layout fights the Leatrix remodel, so route it to
-		-- the plain full map view instead. On-map quest POIs and the
-		-- objective glow are unaffected (they are gated by quest count, not
-		-- by the view).
-		if WorldMapFrame_SetQuestMapView and WorldMapFrame_SetFullMapView then
+		-- Ascension: the map with objectives enabled auto-switches to the
+		-- quest-list layout (quest list + detail panels beside/below the
+		-- map). That layout fights the Leatrix remodel, so route it back
+		-- to the windowed map instead. On-map quest POIs and the objective
+		-- glow are unaffected (they are gated by quest count, not by the
+		-- view).
+		if WorldMapFrame_SetQuestMapView and WorldMap_ToggleSizeDown then
 			WorldMapFrame_SetQuestMapView = function()
 				-- Called from WorldMapFrame_DisplayQuests on every quest log
 				-- update while the map is shown — only relayout when actually
-				-- escaping the quest-list size, never as a no-op relayout
+				-- escaping the quest-list size, never as a no-op relayout.
+				-- Escape back to WINDOWED, never to the full map view: every
+				-- drag path and the screen-anchor sync are gated on the
+				-- windowed size, so a session stuck in fullmap size leaves
+				-- the map immovable, snapping back to its last saved position
 				if WORLDMAP_SETTINGS and WORLDMAP_SETTINGS.size == WORLDMAP_QUESTLIST_SIZE then
-					WorldMapFrame_SetFullMapView()
+					if InCombatLockdown() then
+						-- Protected frame tree; heal after combat instead
+						if LeaMapsZoom and LeaMapsZoom._combatWatcher then
+							LeaMapsZoom._combatWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+						end
+						return
+					end
+					if LeaMapsLC.RestoreWindowedMap then
+						LeaMapsLC.RestoreWindowedMap()
+					else
+						WorldMap_ToggleSizeDown()
+					end
 				end
 			end
 		end
@@ -969,6 +984,16 @@
 		-- map opens at Blizzard's position instead and is put back the
 		-- moment combat ends.
 		local function RestoreMapPositionAndScale()
+			-- Self-heal: if anything (Ascension's quest-list auto-switch,
+			-- Blizzard size toggles) left WORLDMAP_SETTINGS.size in a
+			-- non-windowed state, every drag path and the screen-anchor
+			-- sync stay gated off and the map is stuck snapping back to
+			-- its last saved position. Force windowed mode back on first
+			-- (the ToggleSizeDown hook reruns SetupWorldMapFrame for us)
+			if WORLDMAP_SETTINGS and WORLDMAP_SETTINGS.size ~= WORLDMAP_WINDOWED_SIZE
+			and WorldMap_ToggleSizeDown then
+				WorldMap_ToggleSizeDown()
+			end
 			if LeaMapsDB["MapScale"] then
 				WorldMapFrame:SetScale(LeaMapsDB["MapScale"])
 			end
@@ -978,6 +1003,9 @@
 			-- Quest POI sizes were computed before the scale change above
 			if LeaMapsZoom and LeaMapsZoom.RefreshQuestPOIs then LeaMapsZoom.RefreshQuestPOIs() end
 		end
+		-- Published for the SetQuestMapView reroute above (heals size,
+		-- then reapplies the saved position and scale)
+		LeaMapsLC.RestoreWindowedMap = RestoreMapPositionAndScale
 
 		-- After-combat restore runs through the zoom module's combat
 		-- watcher (SetupWorldMapFrame arms it whenever it must skip work
