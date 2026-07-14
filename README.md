@@ -9,6 +9,8 @@ forked from the [3.3.5a backport](https://github.com/5Buttons/Leatrix-Maps-3.3.5
 - **Map window can be dragged** — left-drag anywhere on the map canvas (when not zoomed in) or the title bar moves the window; position persists across sessions
 - **Quest objective glow follows the map** — the blue objective glow repaints correctly when the map window is moved or scaled (Ascension's client composites it over the UI, so it is also softened to keep the numbered quest icons readable)
 - **No more stray quest panels** — the fullscreen quest-list layout (quest list and detail panels beside/below the map) is disabled; quest POIs on the map are unaffected
+- **Map can never get stuck immovable** — if anything flips the map out of windowed mode (e.g. Ascension's quest-list auto-switch during dungeon quest updates), it is forced back to windowed on the next map open instead of silently disabling all dragging
+- **LootCollector compatibility patch** — LootCollector bundles its own copy of the Magnify zoom addon, which hijacks the map frame and makes the window immovable; [`compat/`](compat/) ships a patch that makes its embedded Magnify stand down when Leatrix Maps is loaded (loot pins keep working)
 
 ---
 <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/820f87a4-acbc-47be-b635-b696ed80e0ea" />
