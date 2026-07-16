@@ -1,7 +1,43 @@
-diff --git a/Magnify/Main.lua b/Magnify/Main.lua
+From 44f84b5e4ba6469dad949113a1ef1bd3f4950f1e Mon Sep 17 00:00:00 2001
+From: CandyManKillerZ <marksluis@outlook.com>
+Date: Thu, 16 Jul 2026 16:18:40 +0200
+Subject: [PATCH] Stand down map remodel when Leatrix Maps is loaded
+
+LootCollector bundles a copy of the Magnify world-map addon, which is
+also what the Leatrix Maps port for Ascension is built from. With both
+installed, the two remodel the same Blizzard map frames and fight each
+other, producing two user-visible bugs:
+
+- The map window cannot be moved: it snaps back to one spot. The
+  embedded Magnify's Frames.xml creates a second frame named
+  WorldMapScrollFrame (shadowing Leatrix's global), replaces the
+  WorldMapButton mouse scripts, and re-anchors WorldMapFrame to its
+  own screen anchor after Leatrix's position restore on every OnShow.
+
+- The map cannot be zoomed: scrolling snaps straight back to the
+  previous zoom. Modules/Map.lua SafeResetWorldMapFrames() (fired from
+  the WorldMapFrame Show/Hide hooks) forces WorldMapDetailFrame scale
+  to 1.0, scroll to 0, and clears zoomedIn, undoing Leatrix's zoom on
+  the next Show.
+
+Fix: when Leatrix_Maps is loaded, the embedded Magnify stands down in
+OnEvent (skips OnFirstLoad/InitOptions, early-returns
+SetupWorldMapFrame) and hands the shadowed WorldMapScrollFrame /
+WorldMapScrollFrameScrollBar globals back to Leatrix's frames, and
+SafeResetWorldMapFrames early-returns. Leatrix then owns the map's
+zoom/pan/position. Loot pins are unaffected: they anchor to
+WorldMapDetailFrame, which Leatrix pans and zooms the same way.
+
+Without Leatrix Maps installed, behavior is completely unchanged.
+---
+ LootCollector/Magnify/Main.lua | 44 ++++++++++++++++++++++++++++++++++
+ LootCollector/Modules/Map.lua  | 13 ++++++++++
+ 2 files changed, 57 insertions(+)
+
+diff --git a/LootCollector/Magnify/Main.lua b/LootCollector/Magnify/Main.lua
 index f762435..e2a69b3 100644
---- a/Magnify/Main.lua
-+++ b/Magnify/Main.lua
+--- a/LootCollector/Magnify/Main.lua
++++ b/LootCollector/Magnify/Main.lua
 @@ -174,6 +174,9 @@ function Magnify.ElvUI_SetupWorldMapFrame()
  end
  
@@ -60,10 +96,10 @@ index f762435..e2a69b3 100644
          Magnify.OnFirstLoad()
          Magnify.InitOptions()
      end
-diff --git a/Modules/Map.lua b/Modules/Map.lua
-index b9678c0..14b47d8 100644
---- a/Modules/Map.lua
-+++ b/Modules/Map.lua
+diff --git a/LootCollector/Modules/Map.lua b/LootCollector/Modules/Map.lua
+index f634abe..6da15fc 100644
+--- a/LootCollector/Modules/Map.lua
++++ b/LootCollector/Modules/Map.lua
 @@ -592,6 +592,19 @@ end
  
  
@@ -84,3 +120,6 @@ index b9678c0..14b47d8 100644
      -- Manual emergency reset. This is intentionally NOT called automatically anymore,
      -- because embedded Magnify owns the map zoom/pan behavior using WorldMapScrollFrame.
      if WorldMapScrollFrame then
+-- 
+2.54.0.windows.1
+

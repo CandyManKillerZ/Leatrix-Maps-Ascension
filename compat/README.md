@@ -38,4 +38,19 @@ which Leatrix pans and zooms the same way.
 
 **Re-apply after every LootCollector update** (the patch modifies
 `LootCollector/Magnify/Main.lua` and `LootCollector/Modules/Map.lua` in
-place), or PR it upstream.
+place), or PR it upstream. A LootCollector update overwrites both files and
+the map goes back to being stuck.
+
+Verified against LootCollector **beta 0.9.2** (upstream moved the addon into a
+`LootCollector/` subfolder at that version; the patch paths match the new
+layout). Apply with:
+
+```bash
+git apply lootcollector-magnify-standdown.patch     # from the repo root
+```
+
+or copy the two guards in by hand — they are one early-return each in
+`Magnify.SetupWorldMapFrame` / `Map:SafeResetWorldMapFrames`, plus the
+stand-down block in `Magnify.OnEvent`.
+
+Without Leatrix Maps installed, LootCollector's behavior is unchanged.
