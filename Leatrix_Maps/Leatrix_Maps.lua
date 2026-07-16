@@ -289,6 +289,31 @@
 			-- handling: our own are wired after this point (OnFirstLoad and
 			-- SetupWorldMapFrame), so they supersede theirs normally.
 
+			-- Their OnFirstLoad has already run (it fires at their
+			-- ADDON_LOADED, before this) and it creates the same custom
+			-- textures we do: the high-res player arrow on WorldMapPlayer and
+			-- the class-coloured party/raid icons. Ours are created in
+			-- OnFirstLoad below, but that only overwrites the Lua field —
+			-- their texture object stays parented to the frame and keeps
+			-- drawing. That is the "double player arrow": their orphan never
+			-- rotates (our OnUpdate only steers ours) so it sits pointing
+			-- north while ours tracks the player. Drop them now; we have not
+			-- created ours yet, so anything present here is not ours.
+			local function dropStaleTexture(frame, key)
+				local tex = frame and frame[key]
+				if tex then
+					if tex.Hide then tex:Hide() end
+					if tex.SetTexture then tex:SetTexture(nil) end
+					frame[key] = nil
+				end
+			end
+
+			dropStaleTexture(WorldMapPlayer, "Icon")
+			for i = 1, MAX_RAID_MEMBERS do
+				dropStaleTexture(_G["WorldMapParty" .. i], "colorIcon")
+				dropStaleTexture(_G["WorldMapRaid"  .. i], "colorIcon")
+			end
+
 		end
 
 		LeaMapsLC:ReclaimMapFrames()
