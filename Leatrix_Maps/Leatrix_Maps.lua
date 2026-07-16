@@ -268,6 +268,47 @@
 				rival.SetupWorldMapFrame = function() return end
 			end
 
+			-- Their embedded Magnify also hooksecurefunc's WorldMap_ToggleSizeDown
+			-- / WorldMap_ToggleSizeUp / WorldMapFrame_SetFullMapView onto ITS OWN
+			-- (stock, unpatched) SetupWorldMapFrame, at ITS ADDON_LOADED — before
+			-- we get here. hooksecurefunc has no unhook API and captures that
+			-- function BY REFERENCE at registration time, so nulling the
+			-- SetupWorldMapFrame field above (a live table lookup, which works
+			-- for their OnShow wrapper) does NOT stop this: their original,
+			-- unmodified map remodel still runs on every size toggle — which
+			-- fires constantly during normal play (e.g. every quest-log update
+			-- while the map is open) — fighting our position/scale and briefly
+			-- reparenting the shared map frames mid-sequence. That is what was
+			-- causing the window to snap back on drag and our own POI-style
+			-- icons (dungeon markers, travel points, zone crossings) to end up
+			-- stuck at stale coordinates outside the visible map.
+			--
+			-- WorldMapFrame_SetQuestMapView already defeats this by being
+			-- reassigned outright below rather than hooksecurefunc'd (a plain
+			-- global assignment discards whatever hook chain existed). Do the
+			-- same for the other three triggers, keeping only the size
+			-- assignment each is documented to make — our own hooksecurefunc,
+			-- registered next in LeaMapsZoom.OnFirstLoad, still runs the real
+			-- layout afterwards exactly as it does today.
+			if rival then
+				local function sizeOnly(newSize)
+					return function()
+						if WORLDMAP_SETTINGS then
+							WORLDMAP_SETTINGS.size = newSize
+						end
+					end
+				end
+				if WorldMap_ToggleSizeDown then
+					WorldMap_ToggleSizeDown = sizeOnly(WORLDMAP_WINDOWED_SIZE)
+				end
+				if WorldMap_ToggleSizeUp then
+					WorldMap_ToggleSizeUp = sizeOnly(WORLDMAP_QUESTLIST_SIZE)
+				end
+				if WorldMapFrame_SetFullMapView then
+					WorldMapFrame_SetFullMapView = sizeOnly(WORLDMAP_FULLMAP_SIZE)
+				end
+			end
+
 			-- Their Map module resets scale/scroll/zoomedIn from the
 			-- WorldMapFrame Show and Hide hooks, which undoes our zoom.
 			-- Their loot pins are unaffected: they anchor to
@@ -339,7 +380,18 @@
 				-- drag path and the screen-anchor sync are gated on the
 				-- windowed size, so a session stuck in fullmap size leaves
 				-- the map immovable, snapping back to its last saved position
-				if WORLDMAP_SETTINGS and WORLDMAP_SETTINGS.size == WORLDMAP_QUESTLIST_SIZE then
+				-- Re-entrancy guard: another addon's own hook on the size
+				-- toggle functions can react to our correction by flipping
+				-- the size right back (e.g. a quest-tracker addon forcing
+				-- questlist mode), re-triggering this same reroute
+				-- synchronously — unbounded mutual recursion between two
+				-- addons' hooks, and deep enough recursion through
+				-- hooksecurefunc chains can hard-crash the client rather
+				-- than error gracefully. Skip while a correction from
+				-- anywhere in this call chain is already in flight; the
+				-- next natural Show/quest-update retries if still needed.
+				if WORLDMAP_SETTINGS and WORLDMAP_SETTINGS.size == WORLDMAP_QUESTLIST_SIZE
+				and not LeaMapsLC._fixingMapSize then
 					if InCombatLockdown() then
 						-- Protected frame tree; heal after combat instead
 						if LeaMapsZoom and LeaMapsZoom._combatWatcher then
@@ -350,7 +402,9 @@
 					if LeaMapsLC.RestoreWindowedMap then
 						LeaMapsLC.RestoreWindowedMap()
 					else
-						WorldMap_ToggleSizeDown()
+						LeaMapsLC._fixingMapSize = true
+						pcall(WorldMap_ToggleSizeDown)
+						LeaMapsLC._fixingMapSize = false
 					end
 				end
 			end
@@ -401,6 +455,30 @@
 
 		-- Hide the maximize button (map is always windowed, matching TBC Classic behaviour)
 		PermanentlyHide(WorldMapFrameSizeUpButton)
+
+		-- Its sibling, the minimize/shrink button, was never covered by the
+		-- line above. Both anchor to WorldMapPositioningGuide — a reference
+		-- frame sized for the FULLSCREEN map layout, unrelated to where our
+		-- small windowed map actually sits — so if anything ever re-Shows
+		-- it (a plain :Hide() above offers no protection against that), it
+		-- appears far from the visible map while still tracking it, since
+		-- the guide moves whenever WorldMapFrame does.
+		PermanentlyHide(WorldMapFrameSizeDownButton)
+
+		-- Same reasoning for the magnifying-glass button above: it also
+		-- anchors to WorldMapPositioningGuide, and was only ever given a
+		-- plain :Hide() (see above), not the permanent kind.
+		PermanentlyHide(WorldMapMagnifyingGlassButton)
+
+		-- The up/down arrow buttons on WorldMapScrollFrameScrollBar (a
+		-- scrollbar that predates any addon touching WorldMapScrollFrame —
+		-- confirmed live via GetMouseFocus) carry their own independent
+		-- global names, so they stay reachable and visible regardless of
+		-- which addon currently owns the (possibly-shadowed) parent
+		-- scrollbar's name. Hide them directly rather than relying on
+		-- whichever object _G.WorldMapScrollFrameScrollBar resolves to.
+		PermanentlyHide(WorldMapScrollFrameScrollBarScrollUpButton)
+		PermanentlyHide(WorldMapScrollFrameScrollBarScrollDownButton)
 
 		-- Kill all default Blizzard decorations on the frame layers
 		WorldMapFrame:DisableDrawLayer("BACKGROUND")
@@ -1084,9 +1162,16 @@
 			-- sync stay gated off and the map is stuck snapping back to
 			-- its last saved position. Force windowed mode back on first
 			-- (the ToggleSizeDown hook reruns SetupWorldMapFrame for us)
+			-- Re-entrancy guard: see the matching note in the
+			-- WorldMapFrame_SetQuestMapView reroute above. Some other
+			-- addon's hook on WorldMap_ToggleSizeDown can react by
+			-- flipping the size right back, re-entering this same
+			-- correction synchronously with no floor otherwise.
 			if WORLDMAP_SETTINGS and WORLDMAP_SETTINGS.size ~= WORLDMAP_WINDOWED_SIZE
-			and WorldMap_ToggleSizeDown then
-				WorldMap_ToggleSizeDown()
+			and WorldMap_ToggleSizeDown and not LeaMapsLC._fixingMapSize then
+				LeaMapsLC._fixingMapSize = true
+				pcall(WorldMap_ToggleSizeDown)
+				LeaMapsLC._fixingMapSize = false
 			end
 			if LeaMapsDB["MapScale"] then
 				WorldMapFrame:SetScale(LeaMapsDB["MapScale"])
