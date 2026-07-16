@@ -439,13 +439,22 @@
 		-- Map appearance
 		----------------------------------------------------------------------
 
-		-- Suppress the world blackout overlay
-		if BlackoutWorld then BlackoutWorld:Hide() end
-
 		-- Permanently hide title button + zone-name label; block re-show hooks
 		local function PermanentlyHide(f)
 			if f then f:Hide(); f.Show = function() end end
 		end
+
+		-- Suppress the world blackout overlay. BlackoutWorld is Blizzard's
+		-- full-screen dim behind the FULLSCREEN map layout — a plain :Hide()
+		-- only stops it once at load; if WORLDMAP_SETTINGS.size ever ends up
+		-- non-windowed again later (the map is always windowed here, but a
+		-- rival addon or Ascension's own quest-list auto-switch can still
+		-- flip it momentarily), Blizzard's native code can re-Show this,
+		-- and since it renders above everything at a high strata, it blacks
+		-- out the entire screen — not just the map — until /reload resets
+		-- Lua state and this one-time hide runs fresh again.
+		PermanentlyHide(BlackoutWorld)
+
 		PermanentlyHide(WorldMapTitleButton)
 		PermanentlyHide(WorldMapFrameTitle)
 
