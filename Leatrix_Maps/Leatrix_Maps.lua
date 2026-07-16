@@ -1165,6 +1165,21 @@
 		-- map opens at Blizzard's position instead and is put back the
 		-- moment combat ends.
 		local function RestoreMapPositionAndScale()
+			-- Belt-and-braces: PermanentlyHide(BlackoutWorld) above runs
+			-- exactly once, during the PLAYER_ENTERING_WORLD-triggered
+			-- setup. If the player opens the map before that one-time setup
+			-- has actually run (observed after a server-crash relog, where
+			-- the client can apparently let the player act before every
+			-- addon's init has completed), BlackoutWorld's Show override
+			-- isn't installed yet for that first open, and since it's a
+			-- full-screen dim above everything, the whole UI blacks out —
+			-- persisting for the rest of the session, because PermanentlyHide
+			-- only ever installs once. This runs on every map Show instead,
+			-- so even a lost race on the very first open is corrected on
+			-- that same open rather than needing a full /reload.
+			if BlackoutWorld and BlackoutWorld:IsShown() then
+				BlackoutWorld:Hide()
+			end
 			-- Self-heal: if anything (Ascension's quest-list auto-switch,
 			-- Blizzard size toggles) left WORLDMAP_SETTINGS.size in a
 			-- non-windowed state, every drag path and the screen-anchor
