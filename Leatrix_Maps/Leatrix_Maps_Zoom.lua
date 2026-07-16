@@ -24,6 +24,14 @@
 
 	LeaMapsZoom.PLAYER_ARROW_SIZE = 36
 
+	-- Our own WorldMapScrollFrame, captured while the global still points at
+	-- it. Leatrix_Maps.xml creates it and loads before this file, but other
+	-- addons that embed Magnify (LootCollector) create a frame with the same
+	-- name and steal the global. Snapshotting here is exact — no guessing by
+	-- frame enumeration later. See LeaMapsLC:ReclaimMapFrames().
+	LeaMapsZoom.OwnScrollFrame = _G.WorldMapScrollFrame
+	LeaMapsZoom.OwnScrollBar   = _G.WorldMapScrollFrameScrollBar
+
 	-- Ascension's client composites the objective blob glow AFTER the whole
 	-- UI renders, so it can never be layered below the quest POI buttons
 	-- (verified: even TOOLTIP-strata buttons draw under it). The fill is

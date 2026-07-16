@@ -224,6 +224,75 @@
 		-- The SetMapOpacity feature below overrides this with the user's chosen value.
 		WorldMapFrame:SetAlpha(1)
 
+		----------------------------------------------------------------------
+		-- Rival map addon compatibility
+		----------------------------------------------------------------------
+
+		-- Some addons embed their own copy of Magnify — the addon our zoom
+		-- module is ported from — and remodel the same Blizzard map frames we
+		-- do. LootCollector is the common one. Two copies fighting leaves the
+		-- map window immovable (it snaps back to their screen anchor on every
+		-- open) and unzoomable (their reset forces the scale back to 1
+		-- whenever the map re-Shows). Patching their files does not hold: an
+		-- addon update overwrites them. So disarm their map code from here.
+		--
+		-- This runs at PLAYER_ENTERING_WORLD — after every addon's
+		-- ADDON_LOADED, so their setup has already happened — and before
+		-- LeaMapsZoom.OnFirstLoad() below, so we own the frames it wires into.
+		function LeaMapsLC:ReclaimMapFrames()
+
+			-- Take the WorldMapScrollFrame global back. Their Frames.xml
+			-- creates a second frame using our name; without this, everything
+			-- below wires into their orphan and zoom/pan silently break.
+			local ourScroll = LeaMapsZoom.OwnScrollFrame
+			if ourScroll and _G.WorldMapScrollFrame ~= ourScroll then
+				local theirs = _G.WorldMapScrollFrame
+				if theirs and theirs.Hide then
+					theirs:Hide()
+					theirs:EnableMouse(false)
+					theirs:EnableMouseWheel(false)
+				end
+				_G.WorldMapScrollFrame = ourScroll
+				if LeaMapsZoom.OwnScrollBar then
+					_G.WorldMapScrollFrameScrollBar = LeaMapsZoom.OwnScrollBar
+				end
+			end
+
+			-- Disarm the embedded Magnify. Their WorldMapFrame OnShow wrapper
+			-- looks SetupWorldMapFrame up on the table at call time, so
+			-- replacing the field is enough to neutralise it; it would
+			-- otherwise re-anchor the map after our position restore.
+			local rival = _G.LootCollectorMagnify
+			if rival then
+				rival.standDown = true
+				rival.SetupWorldMapFrame = function() return end
+			end
+
+			-- Their Map module resets scale/scroll/zoomedIn from the
+			-- WorldMapFrame Show and Hide hooks, which undoes our zoom.
+			-- Their loot pins are unaffected: they anchor to
+			-- WorldMapDetailFrame, which we pan and zoom the same way.
+			local LC = _G.LootCollector
+			if LC and LC.GetModule then
+				local ok, map = pcall(LC.GetModule, LC, "Map", true)
+				if ok and map then
+					if map.SafeResetWorldMapFrames then
+						map.SafeResetWorldMapFrames = function() return end
+					end
+					if map.ResetMapZoomPan then
+						map.ResetMapZoomPan = function() return end
+					end
+				end
+			end
+
+			-- Their WorldMapButton scripts and OnShow wrapper need no special
+			-- handling: our own are wired after this point (OnFirstLoad and
+			-- SetupWorldMapFrame), so they supersede theirs normally.
+
+		end
+
+		LeaMapsLC:ReclaimMapFrames()
+
 		-- Initialise map zoom feature (Leatrix_Maps_Zoom.lua)
 		LeaMapsZoom.OnFirstLoad()
 
