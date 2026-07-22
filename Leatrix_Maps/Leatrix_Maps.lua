@@ -1382,6 +1382,17 @@
 			-- Pool of pin frames for reuse
 			local pinPool = {}
 
+			-- The map ID the currently-shown pins were built for. RefreshPOI
+			-- is wired to WORLD_MAP_UPDATE, which fires several times while
+			-- the map opens and again on every pan — but the POI set only
+			-- depends on the current map, and pins scroll/scale with the
+			-- detail frame, so rebuilding them when the map hasn't changed is
+			-- pure waste (a visible chunk of the first-open lag spike, and
+			-- ongoing churn while panning). Track what we last built for and
+			-- skip identical rebuilds; nil means "nothing built" (forces a
+			-- rebuild — set on hide and on any option change).
+			local lastBuiltMapID = nil
+
 			local function AcquirePin()
 				local pin = table.remove(pinPool)
 				if not pin then
@@ -1424,18 +1435,35 @@
 					ReleasePin(activePins[i])
 					activePins[i] = nil
 				end
+				lastBuiltMapID = nil
 			end
 
 			local function RefreshPOI()
-				ReleaseAllPins()
-				if LeaMapsLC["ShowPointsOfInterest"] ~= "On" then return end
+				if LeaMapsLC["ShowPointsOfInterest"] ~= "On" then
+					ReleaseAllPins()
+					return
+				end
 
 				local mapID = GetCurrentMapID()
-				if not mapID or not PinData[mapID] then return end
+				if not mapID or not PinData[mapID] then
+					ReleaseAllPins()
+					return
+				end
+
+				-- Already built for this exact map — the WORLD_MAP_UPDATE /
+				-- pan storm hits here and returns immediately (see note at
+				-- lastBuiltMapID). Option changes clear lastBuiltMapID first,
+				-- so they still force a rebuild.
+				if mapID == lastBuiltMapID then return end
 
 				local mapW = WorldMapDetailFrame:GetWidth()
 				local mapH = WorldMapDetailFrame:GetHeight()
+				-- Layout not resolved yet (can happen on the very first open):
+				-- leave lastBuiltMapID unset so the next update retries.
 				if not mapW or mapW == 0 then return end
+
+				ReleaseAllPins()
+				lastBuiltMapID = mapID
 
 				local count = #PinData[mapID]
 				for i = 1, count do
@@ -1567,6 +1595,9 @@
 			LeaMapsLC:MakeCB(poiFrame, "ShowSpiritHealers", "Show spirit healers", 16, -172, false, "If checked, spirit healers will be shown.")
 
 			local function SetPointsOfInterest()
+				-- An option toggle changes which pins show without changing
+				-- the map, so clear the dedup key to force a real rebuild.
+				lastBuiltMapID = nil
 				RefreshPOI()
 			end
 
